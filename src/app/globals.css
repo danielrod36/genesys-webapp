@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom global styles can be added here */
+
+/* Print styles to improve PDF output */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  /* Hide elements tagged with print:hidden utility */
+  .print\:hidden {
+    display: none !important;
+  }
+}
