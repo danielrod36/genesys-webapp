@@ -1,0 +1,367 @@
+// Prisma schema for the Genesys RPG management application.
+// This file is generated alongside the ERD described in specs/erd_prisma.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  GM
+  PLAYER
+  VIEWER
+}
+
+enum Characteristic {
+  BRAWN
+  AGILITY
+  INTELLECT
+  CUNNING
+  WILLPOWER
+  PRESENCE
+}
+
+enum ItemType {
+  WEAPON
+  ARMOR
+  ATTACHMENT
+  GEAR
+  OTHER
+}
+
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  IMPORT
+  EXPORT
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  name      String
+  role      UserRole
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  characters   Character[]
+  versions     CharVersion[]
+  notes        Note[]
+  auditEntries AuditEntry[]
+  shares       Share[]   @relation("ShareInviter")
+  settings     Setting[]
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  ownerId   String
+  systemToggles Json
+  domainToggles Json
+  smtpHost   String?
+  smtpPort   Int?
+  smtpUser   String?
+  smtpPass   String?
+  smtpFrom   String?
+  smtpTLS    Boolean?
+  backupPath String?
+  backupRetentionDays Int?
+  theme      String   @default("light")
+  locale     String   @default("en")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  owner     User     @relation(fields: [ownerId], references: [id])
+}
+
+model Character {
+  id              String        @id @default(uuid())
+  name            String
+  ownerId         String
+  playerId        String?
+  speciesId       String?
+  careerId        String?
+  characteristics Json
+  derivedStats    Json
+  motivations     Json?
+  obligationJson  Json?
+  dutyJson        Json?
+  moralityJson    Json?
+  credits         Int           @default(0)
+  encumbranceCurr Int           @default(0)
+  encumbranceMax  Int           @default(0)
+  customFields    Json?
+  portraitPath    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  owner           User       @relation("CharacterOwner", fields: [ownerId], references: [id])
+  player          User?      @relation("CharacterPlayer", fields: [playerId], references: [id])
+  species         Species?   @relation(fields: [speciesId], references: [id])
+  career          Career?    @relation(fields: [careerId], references: [id])
+  charSkills      CharSkill[]
+  charTalents     CharTalent[]
+  charItems       CharItem[]
+  versions        CharVersion[]
+  notes           Note[]
+  xpGrants        XPGrant[]
+  auditEntries    AuditEntry[]
+  shares          Share[]     @relation("CharacterShare")
+}
+
+model CharVersion {
+  id          String   @id @default(uuid())
+  characterId String
+  userId      String
+  data        Json
+  createdAt   DateTime @default(now())
+
+  character   Character @relation(fields: [characterId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model Note {
+  id          String   @id @default(uuid())
+  characterId String
+  userId      String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  character   Character @relation(fields: [characterId], references: [id])
+  author      User      @relation(fields: [userId], references: [id])
+}
+
+model Tag {
+  id          String   @id @default(uuid())
+  name        String
+  color       String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Species {
+  id                       String   @id @default(uuid())
+  name                     String   @unique
+  startingCharacteristics Json
+  woundThreshold          Int
+  strainThreshold         Int
+  description             String?
+  customFields            Json?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  characters              Character[]
+}
+
+model Career {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  careerSkills Json
+  description  String?
+  customFields Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  characters      Character[]
+  specializations Specialization[]
+}
+
+model Specialization {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  careerId     String?
+  description  String?
+  talents      Json
+  customFields Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  career       Career?  @relation(fields: [careerId], references: [id])
+}
+
+model Skill {
+  id              String        @id @default(uuid())
+  name            String        @unique
+  characteristic  Characteristic
+  isCareerDefault Boolean       @default(false)
+  description     String?
+  customFields    Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  charSkills      CharSkill[]
+}
+
+model Talent {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  tier         Int
+  activation   String
+  ranked       Boolean @default(false)
+  prerequisites Json?
+  description   String?
+  customFields  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  charTalents   CharTalent[]
+}
+
+model Quality {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  type         String
+  description   String?
+  customFields  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  itemQualities ItemQuality[]
+}
+
+model Item {
+  id           String   @id @default(uuid())
+  name         String
+  type         ItemType
+  rarity       Int
+  encumbrance  Int
+  price        Int
+  description   String?
+  customFields  Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  itemQualities ItemQuality[]
+  charItems     CharItem[]
+}
+
+model ItemQuality {
+  id        String   @id @default(uuid())
+  itemId    String
+  qualityId String
+  rating    Int       @default(1)
+
+  item      Item      @relation(fields: [itemId], references: [id])
+  quality   Quality   @relation(fields: [qualityId], references: [id])
+
+  @@unique([itemId, qualityId])
+}
+
+model Adversary {
+  id          String   @id @default(uuid())
+  name        String
+  stats       Json
+  description String?
+  customFields Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  name        String
+  sessionDate DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  xpGrants    XPGrant[]
+}
+
+model XPGrant {
+  id          String   @id @default(uuid())
+  sessionId   String
+  characterId String
+  amount      Int
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  session     Session   @relation(fields: [sessionId], references: [id])
+  character   Character @relation(fields: [characterId], references: [id])
+}
+
+model Share {
+  id            String    @id @default(uuid())
+  inviterId     String
+  characterId   String
+  inviteeEmail  String
+  role          UserRole
+  token         String
+  acceptedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  inviter       User      @relation("ShareInviter", fields: [inviterId], references: [id])
+  character     Character @relation("CharacterShare", fields: [characterId], references: [id])
+
+  @@index([inviteeEmail])
+  @@index([characterId])
+}
+
+model AuditEntry {
+  id          String     @id @default(uuid())
+  userId      String
+  entityType  String
+  entityId    String
+  action      ActionType
+  diff        Json?
+  createdAt   DateTime   @default(now())
+
+  user        User       @relation(fields: [userId], references: [id])
+}
+
+model CharSkill {
+  id           String   @id @default(uuid())
+  characterId  String
+  skillId      String
+  rank         Int       @default(0)
+  isCareer     Boolean   @default(false)
+  customFields Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  character    Character @relation(fields: [characterId], references: [id])
+  skill        Skill     @relation(fields: [skillId], references: [id])
+
+  @@unique([characterId, skillId])
+}
+
+model CharTalent {
+  id           String   @id @default(uuid())
+  characterId  String
+  talentId     String
+  rank         Int       @default(0)
+  isActive     Boolean   @default(false)
+  customFields Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  character    Character @relation(fields: [characterId], references: [id])
+  talent       Talent    @relation(fields: [talentId], references: [id])
+
+  @@unique([characterId, talentId])
+}
+
+model CharItem {
+  id           String   @id @default(uuid())
+  characterId  String
+  itemId       String
+  quantity     Int       @default(1)
+  modifications Json?
+  customFields Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  character    Character @relation(fields: [characterId], references: [id])
+  item         Item      @relation(fields: [itemId], references: [id])
+
+  @@unique([characterId, itemId])
+}
