@@ -1,0 +1,81 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:16
+    container_name: genesys_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=genesys
+      - POSTGRES_PASSWORD=genesys
+      - POSTGRES_DB=genesys
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - '5432:5432'
+
+  app:
+    build: .
+    container_name: genesys_app
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      # Node environment (production by default)
+      - NODE_ENV=production
+      # Use environment variables from the `.env`/`unraid.env` file when defined.
+      - DATABASE_URL=${DATABASE_URL}
+      # Default owner used when auth is not set up
+      - DEFAULT_OWNER_ID=${DEFAULT_OWNER_ID}
+      # SMTP configuration placeholders (optional)
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_TLS=${SMTP_TLS}
+      # Backup retention days (optional override for backup service)
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS}
+    ports:
+      - '3000:3000'
+    volumes:
+      - portraits:/app/public/portraits
+      - exports:/app/public/exports
+      # Persist uploaded narrative dice fonts so they survive container restarts
+      - fonts:/app/public/fonts
+
+  # Nightly backup service to dump the database into the /backups volume.
+  # This uses a simple cron loop within the container.  Adjust TZ and time as needed.
+  backup:
+    image: postgres:16
+    container_name: genesys_backup
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_USER=genesys
+      - POSTGRES_PASSWORD=genesys
+      - POSTGRES_DB=genesys
+      - TZ=UTC
+      # Number of backups to retain; read from env file if defined
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS}
+    volumes:
+      - dbdata:/var/lib/postgresql/data:ro
+      - ./backups:/backups
+    entrypoint: |
+      bash -c "\
+        # Determine how many backups to retain (default to 7 if not provided)\
+        retain=${BACKUP_RETENTION_DAYS:-7}; \
+        while true; do \
+          timestamp=$(date +%Y%m%d_%H%M%S); \
+          pg_dump -U $${POSTGRES_USER} -h db $${POSTGRES_DB} > /backups/backup-$${timestamp}.sql; \
+          # keep only the last $retain backups\
+          ls -1tr /backups/backup-*.sql | head -n -$retain | xargs -r rm --; \
+          sleep 86400; \
+        done"
+
+volumes:
+  dbdata:
+  portraits:
+  exports:
+  # Volume to persist uploaded narrative dice fonts
+  fonts:
